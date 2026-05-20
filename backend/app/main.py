@@ -1,6 +1,13 @@
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Allow direct execution via `python .\main.py` from backend\app.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import settings
 from app.database import Base, engine, SessionLocal
@@ -61,3 +68,9 @@ app.include_router(settings_router)
 @app.get("/health", tags=["health"])
 def health_check():
     return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
