@@ -1,30 +1,26 @@
 'use client'
-import { useEffect, useState } from 'react'
+
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getIncidents, startAlert, Incident } from '@/lib/api'
-
-const priorityColors: Record<string, string> = {
-  low: 'bg-green-100 text-green-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  high: 'bg-orange-100 text-orange-800',
-  critical: 'bg-red-100 text-red-800',
-}
-
-const statusColors: Record<string, string> = {
-  created: 'bg-gray-100 text-gray-800',
-  alerting: 'bg-blue-100 text-blue-800',
-  accepted: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
-}
+import { AlertTriangle, ClipboardList, PlayCircle, RefreshCw, Siren, Sparkles } from 'lucide-react'
+import { MetricCard } from '@/components/metric-card'
+import { PageHeader } from '@/components/page-header'
+import { IncidentPriorityBadge, IncidentStatusBadge } from '@/components/status-badges'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatDateTime } from '@/lib/format'
+import { getIncidents, startAlert, type Incident } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 export default function IncidentsPage() {
   const router = useRouter()
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [alerting, setAlerting] = useState<number | null>(null)
+  const [alertingId, setAlertingId] = useState<number | null>(null)
 
   const fetchIncidents = async () => {
     try {
@@ -38,84 +34,165 @@ export default function IncidentsPage() {
     }
   }
 
-  useEffect(() => { fetchIncidents() }, [])
+  useEffect(() => {
+    fetchIncidents()
+  }, [])
 
-  const handleStartAlert = async (e: React.MouseEvent, id: number) => {
-    e.stopPropagation()
-    setAlerting(id)
+  const handleStartAlert = async (event: React.MouseEvent, id: number) => {
+    event.stopPropagation()
+    setAlertingId(id)
+
     try {
       await startAlert(id)
       await fetchIncidents()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Starten der Alarmierung')
     } finally {
-      setAlerting(null)
+      setAlertingId(null)
     }
   }
 
-  const sorted = [...incidents].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const sorted = [...incidents].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+  const createdCount = incidents.filter((incident) => incident.status === 'created').length
+  const alertingCount = incidents.filter((incident) => incident.status === 'alerting').length
+  const acceptedCount = incidents.filter((incident) => incident.status === 'accepted').length
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Piketvorfälle</h1>
-        <Link href="/incidents/new" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
-          + Neuer Vorfall
-        </Link>
+    <div className="space-y-8">
+      <PageHeader
+        badge="Incident registry"
+        title="Every alert, escalation and hand-off in one timeline"
+        description="Inspect the full incident backlog, jump into live escalations and restart alerting for unresolved cases without leaving the control surface."
+        actions={
+          <>
+            <Button onClick={fetchIncidents} variant="secondary">
+              <RefreshCw className={cn(loading && 'animate-spin')} />
+              Aktualisieren
+            </Button>
+            <Link className={buttonVariants({ variant: 'accent', size: 'lg' })} href="/incidents/new">
+              <Siren />
+              Neuer Vorfall
+            </Link>
+          </>
+        }
+        meta={
+          <>
+            <div className="glass-panel rounded-[24px] p-4">
+              <div className="label-muted">Created</div>
+              <div className="mt-3 text-2xl font-semibold text-foreground">{loading ? '...' : createdCount}</div>
+              <div className="mt-2 text-sm text-muted-foreground">Warten auf den ersten Alarmversuch.</div>
+            </div>
+            <div className="glass-panel rounded-[24px] p-4">
+              <div className="label-muted">Live alerting</div>
+              <div className="mt-3 text-2xl font-semibold text-foreground">{loading ? '...' : alertingCount}</div>
+              <div className="mt-2 text-sm text-muted-foreground">Fälle mit laufendem Anruf- und Eskalationsprozess.</div>
+            </div>
+          </>
+        }
+      />
+
+      {error ? (
+        <Card className="border-danger/20 bg-danger/10">
+          <CardContent className="flex items-center gap-3 px-6 py-5 text-danger">
+            <AlertTriangle className="h-5 w-5" />
+            <span>{error}</span>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <MetricCard
+          description="Alle derzeit im System verfolgten Vorfälle."
+          icon={ClipboardList}
+          label="Incidents"
+          tone="brand"
+          value={loading ? '...' : incidents.length}
+        />
+        <MetricCard
+          description="Alarmierungen mit aktivem Kontaktversuch."
+          icon={PlayCircle}
+          label="Alerting"
+          tone="accent"
+          value={loading ? '...' : alertingCount}
+        />
+        <MetricCard
+          description="Bereits übernommene oder akzeptierte Einsätze."
+          icon={Sparkles}
+          label="Accepted"
+          tone="success"
+          value={loading ? '...' : acceptedCount}
+        />
       </div>
 
-      {error && <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">{error}</div>}
-
-      <div className="bg-white rounded-xl shadow">
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">Laden...</div>
-        ) : sorted.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Keine Vorfälle vorhanden</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
-                <th className="px-6 py-3">ID</th>
-                <th className="px-6 py-3">Titel</th>
-                <th className="px-6 py-3">Priorität</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Erstellt</th>
-                <th className="px-6 py-3">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {sorted.map((incident) => (
-                <tr key={incident.id} onClick={() => router.push(`/incidents/${incident.id}`)}
-                  className="hover:bg-gray-50 cursor-pointer">
-                  <td className="px-6 py-4 text-gray-500 text-sm">#{incident.id}</td>
-                  <td className="px-6 py-4 font-medium text-gray-900">{incident.title}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${priorityColors[incident.priority]}`}>
-                      {incident.priority}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusColors[incident.status]}`}>
-                      {incident.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-500 text-sm">
-                    {new Date(incident.created_at).toLocaleDateString('de-CH')}
-                  </td>
-                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                    {(incident.status === 'created' || incident.status === 'failed') && (
-                      <button onClick={(e) => handleStartAlert(e, incident.id)} disabled={alerting === incident.id}
-                        className="px-3 py-1 text-sm bg-orange-100 hover:bg-orange-200 disabled:bg-orange-50 text-orange-700 rounded-lg transition-colors">
-                        {alerting === incident.id ? 'Starten...' : '🚨 Alarmierung starten'}
-                      </button>
-                    )}
-                  </td>
+      <Card>
+        <CardHeader>
+          <CardTitle>Incident backlog</CardTitle>
+          <CardDescription>Klick auf einen Eintrag, um in die Detailansicht mit Anrufprotokoll und Eskalationsstatus zu springen.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="rounded-[20px] border border-border bg-muted/35 px-6 py-12 text-center text-sm text-muted-foreground">
+              Vorfälle werden geladen...
+            </div>
+          ) : sorted.length === 0 ? (
+            <EmptyState
+              action={
+                <Link className={buttonVariants({ variant: 'accent' })} href="/incidents/new">
+                  Ersten Vorfall anlegen
+                </Link>
+              }
+              description="Erstelle einen Piketfall, um Alarmierung, Eskalation und Verlauf in der neuen Oberfläche sichtbar zu machen."
+              icon={ClipboardList}
+              title="Noch keine Vorfälle vorhanden"
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <tr>
+                  <TableHead>Titel</TableHead>
+                  <TableHead>Priorität</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Erstellt</TableHead>
+                  <TableHead className="text-right">Aktionen</TableHead>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </TableHeader>
+              <TableBody>
+                {sorted.map((incident) => {
+                  const canRestart = incident.status === 'created' || incident.status === 'failed'
+
+                  return (
+                    <TableRow className="cursor-pointer" key={incident.id} onClick={() => router.push(`/incidents/${incident.id}`)}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="font-medium text-foreground">{incident.title}</div>
+                          <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">#{incident.id}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <IncidentPriorityBadge priority={incident.priority} />
+                      </TableCell>
+                      <TableCell>
+                        <IncidentStatusBadge status={incident.status} />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatDateTime(incident.created_at)}</TableCell>
+                      <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
+                        {canRestart ? (
+                          <Button onClick={(event) => handleStartAlert(event, incident.id)} size="sm" variant="accent">
+                            <PlayCircle className={cn(alertingId === incident.id && 'animate-pulse')} />
+                            {alertingId === incident.id ? 'Startet...' : 'Alarmierung starten'}
+                          </Button>
+                        ) : (
+                          <span className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Keine Aktion</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

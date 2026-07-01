@@ -1,32 +1,18 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { getIncident, getIncidentCallLogs, startAlert, Incident, CallLog } from '@/lib/api'
-
-const priorityColors: Record<string, string> = {
-  low: 'bg-green-100 text-green-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  high: 'bg-orange-100 text-orange-800',
-  critical: 'bg-red-100 text-red-800',
-}
-
-const statusColors: Record<string, string> = {
-  created: 'bg-gray-100 text-gray-800',
-  alerting: 'bg-blue-100 text-blue-800',
-  accepted: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
-}
-
-const callStatusColors: Record<string, string> = {
-  queued: 'bg-gray-100 text-gray-800',
-  ringing: 'bg-yellow-100 text-yellow-800',
-  'in-progress': 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  'no-answer': 'bg-orange-100 text-orange-800',
-  busy: 'bg-orange-100 text-orange-800',
-}
+import { AlertTriangle, ArrowLeft, CheckCircle2, PhoneCall, RefreshCw, Siren, Waves } from 'lucide-react'
+import { MetricCard } from '@/components/metric-card'
+import { PageHeader } from '@/components/page-header'
+import { CallStatusBadge, IncidentPriorityBadge, IncidentStatusBadge } from '@/components/status-badges'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatDateTime } from '@/lib/format'
+import { getIncident, getIncidentCallLogs, startAlert, type CallLog, type Incident } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 export default function IncidentDetailPage() {
   const params = useParams()
@@ -40,9 +26,9 @@ export default function IncidentDetailPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [inc, logs] = await Promise.all([getIncident(id), getIncidentCallLogs(id)])
-      setIncident(inc)
-      setCallLogs(logs)
+      const [incidentData, callLogData] = await Promise.all([getIncident(id), getIncidentCallLogs(id)])
+      setIncident(incidentData)
+      setCallLogs(callLogData)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden')
@@ -57,12 +43,14 @@ export default function IncidentDetailPage() {
 
   useEffect(() => {
     if (incident?.status !== 'alerting') return
-    const interval = setInterval(fetchData, 5000)
-    return () => clearInterval(interval)
+
+    const intervalId = window.setInterval(fetchData, 5000)
+    return () => window.clearInterval(intervalId)
   }, [incident?.status, fetchData])
 
   const handleStartAlert = async () => {
     setAlerting(true)
+
     try {
       await startAlert(id)
       await fetchData()
@@ -73,110 +61,221 @@ export default function IncidentDetailPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Laden...</div>
-  if (error) return <div className="p-8 text-center text-red-600">{error}</div>
-  if (!incident) return <div className="p-8 text-center text-gray-500">Vorfall nicht gefunden</div>
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="px-6 py-12 text-center text-sm text-muted-foreground">Vorfall und Protokolle werden geladen...</CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="border-danger/20 bg-danger/10">
+        <CardContent className="flex items-center gap-3 px-6 py-5 text-danger">
+          <AlertTriangle className="h-5 w-5" />
+          <span>{error}</span>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!incident) {
+    return <EmptyState description="Der angeforderte Vorfall konnte nicht geladen werden." icon={AlertTriangle} title="Vorfall nicht gefunden" />
+  }
+
+  const completedCalls = callLogs.filter((log) => log.status === 'completed').length
+  const activeCalls = callLogs.filter((log) => ['queued', 'ringing', 'in-progress', 'initiated'].includes(log.status)).length
+  const failedCalls = callLogs.filter((log) => ['failed', 'no-answer', 'busy'].includes(log.status)).length
+  const canRestart = incident.status === 'created' || incident.status === 'failed'
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700">← Zurück</button>
-        <h1 className="text-3xl font-bold text-gray-900 flex-1">{incident.title}</h1>
-        {(incident.status === 'created' || incident.status === 'failed') && (
-          <button onClick={handleStartAlert} disabled={alerting}
-            className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-lg font-medium transition-colors">
-            {alerting ? 'Starten...' : '🚨 Alarmierung starten'}
-          </button>
-        )}
+    <div className="space-y-8">
+      <PageHeader
+        badge="Incident detail"
+        title={incident.title}
+        description={incident.description || 'Für diesen Vorfall wurde keine zusätzliche schriftliche Beschreibung hinterlegt.'}
+        actions={
+          <>
+            <Button onClick={() => router.back()} variant="outline">
+              <ArrowLeft />
+              Zurück
+            </Button>
+            <Button onClick={fetchData} variant="secondary">
+              <RefreshCw className={cn(incident.status === 'alerting' && 'animate-spin')} />
+              Neu laden
+            </Button>
+            {canRestart ? (
+              <Button onClick={handleStartAlert} variant="accent">
+                <Siren className={cn(alerting && 'animate-pulse')} />
+                {alerting ? 'Startet...' : 'Alarmierung starten'}
+              </Button>
+            ) : null}
+          </>
+        }
+        meta={
+          <>
+            <div className="glass-panel rounded-[24px] p-4">
+              <div className="label-muted">Status</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <IncidentPriorityBadge priority={incident.priority} />
+                <IncidentStatusBadge status={incident.status} />
+              </div>
+            </div>
+            <div className="glass-panel rounded-[24px] p-4">
+              <div className="label-muted">Opened</div>
+              <div className="mt-3 text-lg font-semibold text-foreground">{formatDateTime(incident.created_at)}</div>
+              <div className="mt-2 text-sm text-muted-foreground">Zuletzt aktualisiert {formatDateTime(incident.updated_at)}</div>
+            </div>
+          </>
+        }
+      />
+
+      {incident.status === 'alerting' ? (
+        <Card className="border-brand/20 bg-brand/10">
+          <CardContent className="flex items-center gap-3 px-6 py-5 text-brand">
+            <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-brand" />
+            <span>Alarmierung läuft. Die Ansicht aktualisiert sich alle 5 Sekunden automatisch.</span>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <MetricCard
+          description="Alle protokollierten Kontaktversuche für diesen Vorfall."
+          icon={PhoneCall}
+          label="Call attempts"
+          tone="brand"
+          value={callLogs.length}
+        />
+        <MetricCard
+          description="Abgeschlossene und erfolgreich beendete Verbindungen."
+          icon={CheckCircle2}
+          label="Completed"
+          tone="success"
+          value={completedCalls}
+        />
+        <MetricCard
+          description="Aktive oder fehlgeschlagene Versuche im Eskalationslauf."
+          icon={AlertTriangle}
+          label="Open + failed"
+          tone="accent"
+          value={activeCalls + failedCalls}
+        />
       </div>
 
-      {incident.status === 'alerting' && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg flex items-center gap-2">
-          <span className="animate-pulse">●</span>
-          <span>Alarmierung läuft – wird alle 5 Sekunden aktualisiert</span>
-        </div>
-      )}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Incident facts</CardTitle>
+            <CardDescription>Die wichtigsten Steuerdaten für die Alarmierung und Dokumentation.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="space-y-4 text-sm text-muted-foreground">
+              <div className="flex items-center justify-between gap-4 rounded-[20px] border border-border bg-muted/35 px-4 py-3">
+                <dt className="text-muted-foreground">ID</dt>
+                <dd className="font-medium text-foreground">#{incident.id}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-[20px] border border-border bg-muted/35 px-4 py-3">
+                <dt className="text-muted-foreground">Priorität</dt>
+                <dd><IncidentPriorityBadge priority={incident.priority} /></dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-[20px] border border-border bg-muted/35 px-4 py-3">
+                <dt className="text-muted-foreground">Status</dt>
+                <dd><IncidentStatusBadge status={incident.status} /></dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-[20px] border border-border bg-muted/35 px-4 py-3">
+                <dt className="text-muted-foreground">Erstellt</dt>
+                <dd>{formatDateTime(incident.created_at)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-[20px] border border-border bg-muted/35 px-4 py-3">
+                <dt className="text-muted-foreground">Aktualisiert</dt>
+                <dd>{formatDateTime(incident.updated_at)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-[20px] border border-border bg-muted/35 px-4 py-3">
+                <dt className="text-muted-foreground">Accepted by</dt>
+                <dd>{incident.accepted_by_contact_id ? `#${incident.accepted_by_contact_id}` : 'Noch nicht bestätigt'}</dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
 
-      <div className="grid grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Details</h2>
-          <dl className="space-y-3">
-            <div className="flex justify-between">
-              <dt className="text-gray-500">ID</dt>
-              <dd className="font-medium">#{incident.id}</dd>
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-brand/25 bg-brand/10 text-brand">
+                <Waves className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle>Voice payload</CardTitle>
+                <CardDescription>Der Text, der dem on-call Kontakt telefonisch vorgelesen wird.</CardDescription>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Priorität</dt>
-              <dd><span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${priorityColors[incident.priority]}`}>{incident.priority}</span></dd>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {incident.description ? (
+              <div className="rounded-[20px] border border-border bg-muted/35 p-4">
+                <div className="label-muted">Beschreibung</div>
+                <p className="mt-3 text-sm leading-7 text-foreground">{incident.description}</p>
+              </div>
+            ) : null}
+            <div className="rounded-[20px] border border-brand/20 bg-brand/10 p-5 font-mono text-sm leading-7 text-foreground">
+              {incident.voice_message}
             </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Status</dt>
-              <dd><span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusColors[incident.status]}`}>{incident.status}</span></dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Erstellt</dt>
-              <dd>{new Date(incident.created_at).toLocaleString('de-CH')}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Aktualisiert</dt>
-              <dd>{new Date(incident.updated_at).toLocaleString('de-CH')}</dd>
-            </div>
-          </dl>
-        </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Nachrichten</h2>
-          {incident.description && (
-            <div className="mb-4">
-              <p className="text-sm text-gray-500 mb-1">Beschreibung</p>
-              <p className="text-gray-900">{incident.description}</p>
-            </div>
-          )}
+      <Card>
+        <CardHeader className="flex flex-row items-end justify-between gap-4">
           <div>
-            <p className="text-sm text-gray-500 mb-1">Sprachnachricht</p>
-            <p className="text-gray-900 bg-gray-50 rounded-lg p-3 text-sm">{incident.voice_message}</p>
+            <CardTitle>Call log</CardTitle>
+            <CardDescription>Alle Kontaktversuche, Statuswechsel und Antworten für diesen Vorfall.</CardDescription>
           </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow">
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Anrufprotokoll ({callLogs.length})</h2>
-          <button onClick={fetchData} className="text-sm text-gray-500 hover:text-gray-700">🔄 Aktualisieren</button>
-        </div>
-        {callLogs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Keine Anrufe bisher</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
-                <th className="px-6 py-3">Kontakt</th>
-                <th className="px-6 py-3">Twilio Call SID</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Antwort</th>
-                <th className="px-6 py-3">Gestartet</th>
-                <th className="px-6 py-3">Beendet</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {callLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium text-gray-900">{log.contact?.name ?? `#${log.contact_id}`}</td>
-                  <td className="px-6 py-4 text-gray-500 text-xs font-mono">{log.twilio_call_sid || '—'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${callStatusColors[log.status] || 'bg-gray-100 text-gray-800'}`}>
-                      {log.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{log.response_digit || '—'}</td>
-                  <td className="px-6 py-4 text-gray-500 text-sm">{new Date(log.started_at).toLocaleString('de-CH')}</td>
-                  <td className="px-6 py-4 text-gray-500 text-sm">{log.ended_at ? new Date(log.ended_at).toLocaleString('de-CH') : '—'}</td>
+          <Button onClick={fetchData} size="sm" variant="ghost">
+            <RefreshCw className="h-4 w-4" />
+            Aktualisieren
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {callLogs.length === 0 ? (
+            <EmptyState
+              description="Sobald ein Kontaktversuch gestartet wird, erscheinen hier Twilio-SID, Antwort und Zeitstempel."
+              icon={PhoneCall}
+              title="Noch keine Anrufprotokolle"
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <tr>
+                  <TableHead>Kontakt</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Twilio SID</TableHead>
+                  <TableHead>Antwort</TableHead>
+                  <TableHead>Start</TableHead>
+                  <TableHead>Ende</TableHead>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </TableHeader>
+              <TableBody>
+                {callLogs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell>
+                      <div className="font-medium text-foreground">{log.contact?.name ?? `#${log.contact_id}`}</div>
+                    </TableCell>
+                    <TableCell>
+                      <CallStatusBadge status={log.status} />
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{log.twilio_call_sid || '—'}</TableCell>
+                    <TableCell>{log.response_digit || '—'}</TableCell>
+                    <TableCell>{formatDateTime(log.started_at)}</TableCell>
+                    <TableCell>{log.ended_at ? formatDateTime(log.ended_at) : '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

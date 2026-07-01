@@ -1,3 +1,167 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+	:root {
+		--background: 210 40% 98%;
+		--foreground: 222 47% 11%;
+		--card: 0 0% 100%;
+		--card-foreground: 222 47% 11%;
+		--popover: 0 0% 100%;
+		--popover-foreground: 222 47% 11%;
+		--muted: 214 32% 91%;
+		--muted-foreground: 215 16% 42%;
+		--border: 214 32% 86%;
+		--input: 214 32% 90%;
+		--ring: 188 84% 36%;
+		--brand: 188 84% 36%;
+		--brand-foreground: 0 0% 100%;
+		--brand-soft: 190 76% 92%;
+		--accent: 25 95% 53%;
+		--accent-foreground: 0 0% 100%;
+		--success: 146 68% 46%;
+		--warning: 37 92% 58%;
+		--danger: 0 84% 60%;
+		--surface: 0 0% 100%;
+		--surface-strong: 210 40% 96%;
+		--shell: 0 0% 100%;
+		--panel-glass: 0 0% 100%;
+		--panel-glass-alpha: 0.72;
+		--subtle-alpha: 0.62;
+		--grid-alpha: 0.48;
+		--radius: 1.5rem;
+	}
+
+	.dark {
+		--background: 223 47% 7%;
+		--foreground: 214 40% 96%;
+		--card: 222 33% 11%;
+		--card-foreground: 214 40% 96%;
+		--popover: 222 33% 12%;
+		--popover-foreground: 214 40% 96%;
+		--muted: 222 22% 18%;
+		--muted-foreground: 215 20% 72%;
+		--border: 218 23% 22%;
+		--input: 221 26% 17%;
+		--ring: 187 92% 57%;
+		--brand: 187 92% 57%;
+		--brand-foreground: 222 47% 9%;
+		--brand-soft: 191 81% 16%;
+		--accent: 27 96% 62%;
+		--accent-foreground: 16 58% 10%;
+		--surface: 222 33% 11%;
+		--surface-strong: 222 36% 15%;
+		--shell: 224 55% 6%;
+		--panel-glass: 222 33% 14%;
+		--panel-glass-alpha: 0.58;
+		--subtle-alpha: 0.08;
+		--grid-alpha: 0.16;
+	}
+
+	* {
+		@apply border-border;
+	}
+
+	html {
+		@apply bg-background text-foreground;
+	}
+
+	body {
+		@apply min-h-screen bg-background font-sans text-foreground antialiased;
+		background-image:
+			radial-gradient(circle at top left, hsl(var(--brand) / 0.16), transparent 30%),
+			radial-gradient(circle at 82% 16%, hsl(var(--accent) / 0.14), transparent 28%),
+			radial-gradient(circle at 50% 120%, hsl(var(--brand-soft) / 0.44), transparent 34%);
+	}
+
+	body::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		z-index: -2;
+		background-image:
+			linear-gradient(hsl(var(--border) / var(--grid-alpha)) 1px, transparent 1px),
+			linear-gradient(90deg, hsl(var(--border) / var(--grid-alpha)) 1px, transparent 1px);
+		background-size: 44px 44px;
+		mask-image: radial-gradient(circle at center, black, transparent 85%);
+		animation: grid-pan 26s linear infinite;
+	}
+
+	body::after {
+		content: '';
+		position: fixed;
+		inset: 0;
+		z-index: -1;
+		opacity: var(--subtle-alpha);
+		background-image: radial-gradient(hsl(var(--foreground) / 0.18) 0.7px, transparent 0.7px);
+		background-size: 18px 18px;
+		pointer-events: none;
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		@apply font-display;
+		letter-spacing: -0.04em;
+	}
+
+	::selection {
+		background: hsl(var(--brand) / 0.24);
+		color: hsl(var(--foreground));
+	}
+}
+
+@layer components {
+	.glass-panel {
+		@apply border border-border backdrop-blur-xl;
+		background: hsl(var(--panel-glass) / var(--panel-glass-alpha));
+		box-shadow: 0 20px 80px -32px hsl(222 47% 11% / 0.36);
+	}
+
+	.text-gradient {
+		@apply bg-gradient-to-r from-foreground via-brand to-accent bg-clip-text text-transparent;
+	}
+
+	.eyebrow {
+		@apply inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-brand;
+	}
+
+	.surface-panel {
+		@apply border border-border bg-card/85 text-card-foreground shadow-panel backdrop-blur-xl;
+	}
+
+	.hero-panel {
+		@apply border border-border text-card-foreground shadow-panel backdrop-blur-xl;
+		background:
+			linear-gradient(135deg, hsl(var(--surface) / 0.96), hsl(var(--surface-strong) / 0.9)),
+			radial-gradient(circle at 12% 20%, hsl(var(--brand) / 0.12), transparent 30%),
+			radial-gradient(circle at 88% 10%, hsl(var(--accent) / 0.1), transparent 28%);
+	}
+
+	.subtle-panel {
+		@apply border border-border bg-muted/55 text-muted-foreground;
+	}
+
+	.label-muted {
+		@apply text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground;
+	}
+}
+
+@layer utilities {
+	.scrollbar-hidden {
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+	}
+
+	.scrollbar-hidden::-webkit-scrollbar {
+		display: none;
+	}
+
+	.text-balance {
+		text-wrap: balance;
+	}
+}

@@ -1,8 +1,8 @@
 FROM node:20-alpine AS base
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json yarn.lock .yarnrc ./
+RUN corepack enable && yarn install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN yarn build
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["yarn", "start"]

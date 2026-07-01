@@ -84,10 +84,10 @@ API-Dokumentation (Swagger): http://localhost:8000/docs
 cd frontend
 
 # Abhängigkeiten installieren
-npm install
+yarn install
 
 # Entwicklungsserver starten
-npm run dev
+yarn dev
 ```
 
 Das Frontend läuft auf http://localhost:3000

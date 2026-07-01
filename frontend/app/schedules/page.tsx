@@ -1,8 +1,29 @@
 'use client'
+
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { getSchedules, createSchedule, updateSchedule, deleteSchedule, getContacts, Schedule, ScheduleCreate, Contact } from '@/lib/api'
+import { AlertTriangle, CalendarRange, Clock3, Pencil, Plus, TimerReset, Trash2, UsersRound } from 'lucide-react'
+import { MetricCard } from '@/components/metric-card'
+import { PageHeader } from '@/components/page-header'
+import { ActiveStateBadge } from '@/components/status-badges'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { createSchedule, deleteSchedule, getContacts, getSchedules, updateSchedule, type Contact, type Schedule, type ScheduleCreate } from '@/lib/api'
+import { formatDateTime } from '@/lib/format'
 
 const emptyForm: ScheduleCreate = { contact_id: 0, start_time: '', end_time: '', active: true }
+
+function formatDuration(startTime: string, endTime: string) {
+  const start = new Date(startTime).getTime()
+  const end = new Date(endTime).getTime()
+  const hours = Math.max((end - start) / 3_600_000, 0)
+  return `${hours.toFixed(1)} h`
+}
 
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
@@ -19,9 +40,9 @@ export default function SchedulesPage() {
     try {
       setLoading(true)
       setError(null)
-      const [s, c] = await Promise.all([getSchedules(), getContacts()])
-      setSchedules(s)
-      setContacts(c)
+      const [scheduleData, contactData] = await Promise.all([getSchedules(), getContacts()])
+      setSchedules(scheduleData)
+      setContacts(contactData)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden')
     } finally {
@@ -29,15 +50,15 @@ export default function SchedulesPage() {
     }
   }
 
-  useEffect(() => { fetchData() }, [])
-
-  const contactName = (id: number) => contacts.find((c) => c.id === id)?.name ?? `#${id}`
+  useEffect(() => {
+    fetchData()
+  }, [])
 
   const toDatetimeLocal = (iso: string) => {
     if (!iso) return ''
-    const d = new Date(iso)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    const date = new Date(iso)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
   }
 
   const openCreate = () => {
@@ -47,20 +68,39 @@ export default function SchedulesPage() {
     setShowForm(true)
   }
 
-  const openEdit = (s: Schedule) => {
-    setEditId(s.id)
-    setForm({ contact_id: s.contact_id, start_time: toDatetimeLocal(s.start_time), end_time: toDatetimeLocal(s.end_time), active: s.active })
+  const openEdit = (schedule: Schedule) => {
+    setEditId(schedule.id)
+    setForm({
+      contact_id: schedule.contact_id,
+      start_time: toDatetimeLocal(schedule.start_time),
+      end_time: toDatetimeLocal(schedule.end_time),
+      active: schedule.active,
+    })
     setFormError(null)
     setShowForm(true)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.contact_id) { setFormError('Person ist erforderlich'); return }
-    if (!form.start_time) { setFormError('Startzeit ist erforderlich'); return }
-    if (!form.end_time) { setFormError('Endzeit ist erforderlich'); return }
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    if (!form.contact_id) {
+      setFormError('Person ist erforderlich')
+      return
+    }
+
+    if (!form.start_time) {
+      setFormError('Startzeit ist erforderlich')
+      return
+    }
+
+    if (!form.end_time) {
+      setFormError('Endzeit ist erforderlich')
+      return
+    }
+
     setSaving(true)
     setFormError(null)
+
     try {
       if (editId !== null) {
         await updateSchedule(editId, form)
@@ -77,7 +117,8 @@ export default function SchedulesPage() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Eintrag wirklich löschen?')) return
+    if (!window.confirm('Eintrag wirklich löschen?')) return
+
     try {
       await deleteSchedule(id)
       await fetchData()
@@ -86,108 +127,218 @@ export default function SchedulesPage() {
     }
   }
 
+  const activeCount = schedules.filter((schedule) => schedule.active).length
+  const nextHandover = [...schedules]
+    .filter((schedule) => new Date(schedule.end_time).getTime() > Date.now())
+    .sort((left, right) => new Date(left.end_time).getTime() - new Date(right.end_time).getTime())[0]
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Piketplan</h1>
-        <button onClick={openCreate} disabled={contacts.length === 0}
-          title={contacts.length === 0 ? 'Bitte zuerst eine Piketperson erstellen' : undefined}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors">
-          + Neuer Eintrag
-        </button>
+    <div className="space-y-8">
+      <PageHeader
+        badge="Duty rota"
+        title="Map every hand-off across the on-call timeline"
+        description="Plane Schichten, Übergaben und aktive Zeitfenster so, dass die Alarmierung immer den richtigen Kontakt zum richtigen Zeitpunkt erreicht."
+        actions={
+          <Button
+            disabled={contacts.length === 0}
+            onClick={openCreate}
+            title={contacts.length === 0 ? 'Bitte zuerst eine Piketperson erstellen' : undefined}
+            variant="accent"
+          >
+            <Plus />
+            Neuer Eintrag
+          </Button>
+        }
+        meta={
+          <>
+            <div className="glass-panel rounded-[24px] p-4">
+              <div className="label-muted">Active shifts</div>
+              <div className="mt-3 text-2xl font-semibold text-foreground">{loading ? '...' : activeCount}</div>
+              <div className="mt-2 text-sm text-muted-foreground">Zurzeit aktiv gesetzte Zeitfenster im Einsatzplan.</div>
+            </div>
+            <div className="glass-panel rounded-[24px] p-4">
+              <div className="label-muted">Next handover</div>
+              <div className="mt-3 text-lg font-semibold text-foreground">{nextHandover ? formatDateTime(nextHandover.end_time) : 'Keine bevorstehende Übergabe'}</div>
+              <div className="mt-2 text-sm text-muted-foreground">Der nächste bekannte Übergabepunkt im aktuellen Plan.</div>
+            </div>
+          </>
+        }
+      />
+
+      {contacts.length === 0 && !loading ? (
+        <Card className="border-warning/25 bg-warning/10">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 px-6 py-5 text-warning">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5" />
+              <div>
+                <div className="font-medium">Noch keine Piketpersonen vorhanden</div>
+                <div className="mt-1 text-sm text-warning">Lege zuerst unter Piketpersonen einen Kontakt an, bevor du Schichten planst.</div>
+              </div>
+            </div>
+            <Link className={buttonVariants({ variant: 'outline' })} href="/contacts">
+              Zu den Piketpersonen
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {error ? (
+        <Card className="border-danger/20 bg-danger/10">
+          <CardContent className="flex items-center gap-3 px-6 py-5 text-danger">
+            <AlertTriangle className="h-5 w-5" />
+            <span>{error}</span>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard
+          description="Alle geplanten Einsätze und Übergaben im System."
+          icon={CalendarRange}
+          label="Schedule items"
+          tone="brand"
+          value={loading ? '...' : schedules.length}
+        />
+        <MetricCard
+          description="Aktuell wirksame oder freigeschaltete Zeitfenster."
+          icon={Clock3}
+          label="Active"
+          tone="success"
+          value={loading ? '...' : activeCount}
+        />
+        <MetricCard
+          description="Kontaktbasis, auf der der Einsatzplan aufsetzt."
+          icon={UsersRound}
+          label="Available contacts"
+          tone="accent"
+          value={loading ? '...' : contacts.length}
+        />
       </div>
 
-      {!loading && contacts.length === 0 && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-sm">
-          Keine Piketpersonen vorhanden. Bitte zuerst unter <a href="/contacts" className="underline font-medium">Piketpersonen</a> eine Person erstellen.
+      {showForm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm">
+          <Card className="w-full max-w-2xl">
+            <CardHeader>
+              <CardTitle>{editId !== null ? 'Zeitfenster bearbeiten' : 'Zeitfenster anlegen'}</CardTitle>
+              <CardDescription>Plane Start, Ende und Aktivstatus für die zuständige Piketperson.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {formError ? (
+                <div className="mb-6 rounded-[20px] border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{formError}</div>
+              ) : null}
+              <form className="space-y-5" onSubmit={handleSubmit}>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Person *</label>
+                  <Select
+                    onChange={(event) => setForm({ ...form, contact_id: Number.parseInt(event.target.value, 10) })}
+                    required
+                    value={form.contact_id}
+                  >
+                    <option value={0}>Person auswählen...</option>
+                    {contacts.map((contact) => (
+                      <option key={contact.id} value={contact.id}>{contact.name}</option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Von *</label>
+                    <Input onChange={(event) => setForm({ ...form, start_time: event.target.value })} required type="datetime-local" value={form.start_time} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Bis *</label>
+                    <Input onChange={(event) => setForm({ ...form, end_time: event.target.value })} required type="datetime-local" value={form.end_time} />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-3 rounded-[20px] border border-border bg-muted/35 px-4 py-3 text-sm text-foreground">
+                  <Checkbox checked={form.active ?? true} onChange={(event) => setForm({ ...form, active: event.target.checked })} />
+                  Zeitfenster sofort als aktiv markieren
+                </label>
+
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <Button disabled={saving} type="submit" variant="accent">
+                    {saving ? 'Speichert...' : 'Speichern'}
+                  </Button>
+                  <Button onClick={() => setShowForm(false)} type="button" variant="secondary">
+                    Abbrechen
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         </div>
-      )}
+      ) : null}
 
-      {error && <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">{error}</div>}
-
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-            <h2 className="text-xl font-semibold mb-6">{editId !== null ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</h2>
-            {formError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{formError}</div>}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Person *</label>
-                <select required value={form.contact_id} onChange={(e) => setForm({ ...form, contact_id: parseInt(e.target.value) })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value={0}>Person auswählen...</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Von *</label>
-                <input type="datetime-local" required value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bis *</label>
-                <input type="datetime-local" required value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="sched-active" checked={form.active ?? true} onChange={(e) => setForm({ ...form, active: e.target.checked })}
-                  className="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                <label htmlFor="sched-active" className="text-sm font-medium text-gray-700">Aktiv</label>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={saving} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors">
-                  {saving ? 'Speichern...' : 'Speichern'}
-                </button>
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors">
-                  Abbrechen
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl shadow">
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">Laden...</div>
-        ) : schedules.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Keine Einträge vorhanden</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
-                <th className="px-6 py-3">Person</th>
-                <th className="px-6 py-3">Von</th>
-                <th className="px-6 py-3">Bis</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {schedules.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium text-gray-900">{s.contact ? s.contact.name : contactName(s.contact_id)}</td>
-                  <td className="px-6 py-4 text-gray-600">{new Date(s.start_time).toLocaleString('de-CH')}</td>
-                  <td className="px-6 py-4 text-gray-600">{new Date(s.end_time).toLocaleString('de-CH')}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${s.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                      {s.active ? 'Aktiv' : 'Inaktiv'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      <button onClick={() => openEdit(s)} className="px-3 py-1 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors">Bearbeiten</button>
-                      <button onClick={() => handleDelete(s.id)} className="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors">Löschen</button>
-                    </div>
-                  </td>
+      <Card>
+        <CardHeader>
+          <CardTitle>Schedule matrix</CardTitle>
+          <CardDescription>Alle Schichten und Übergaben in einer kompakten, zeitbezogenen Übersicht.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="rounded-[20px] border border-border bg-muted/35 px-6 py-12 text-center text-sm text-muted-foreground">
+              Einsatzplan wird geladen...
+            </div>
+          ) : schedules.length === 0 ? (
+            <EmptyState
+              action={contacts.length > 0 ? <Button onClick={openCreate} variant="accent"><Plus />Ersten Eintrag erstellen</Button> : undefined}
+              description="Lege ein erstes Zeitfenster an, damit das System beim Alerting den zuständigen Kontakt ermitteln kann."
+              icon={CalendarRange}
+              title="Noch keine Einsätze geplant"
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <tr>
+                  <TableHead>Person</TableHead>
+                  <TableHead>Fenster</TableHead>
+                  <TableHead>Dauer</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Aktionen</TableHead>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </TableHeader>
+              <TableBody>
+                {schedules.map((schedule) => (
+                  <TableRow key={schedule.id}>
+                    <TableCell>
+                      <div className="font-medium text-foreground">{schedule.contact ? schedule.contact.name : `#${schedule.contact_id}`}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1 text-muted-foreground">
+                        <div>{formatDateTime(schedule.start_time)}</div>
+                        <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">bis {formatDateTime(schedule.end_time)}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/55 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-foreground">
+                        <TimerReset className="h-3.5 w-3.5" />
+                        {formatDuration(schedule.start_time, schedule.end_time)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <ActiveStateBadge active={schedule.active} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button onClick={() => openEdit(schedule)} size="sm" variant="secondary">
+                          <Pencil className="h-4 w-4" />
+                          Bearbeiten
+                        </Button>
+                        <Button onClick={() => handleDelete(schedule.id)} size="sm" variant="danger">
+                          <Trash2 className="h-4 w-4" />
+                          Löschen
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
