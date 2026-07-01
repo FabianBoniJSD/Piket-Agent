@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
-    BASE_URL: str = "http://localhost:8000"
+    BASE_URL: str
     CORS_ORIGINS: str = "http://localhost:3000"
 
     class Config:

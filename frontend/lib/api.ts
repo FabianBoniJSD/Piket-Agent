@@ -1,4 +1,8 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_BASE) {
+  throw new Error('NEXT_PUBLIC_API_URL is not set. Please configure it in your environment.');
+}
 
 // Types
 export interface Contact { id: number; name: string; phone_number: string; email?: string; active: boolean; priority: number; notes?: string; created_at: string; updated_at: string; }

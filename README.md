@@ -29,7 +29,9 @@ Das System besteht aus:
 - Python 3.11+
 - Node.js 20+
 - Docker & Docker Compose (optional)
-- ngrok (für lokale Twilio-Webhooks)
+- Öffentliche Domain (für Twilio-Webhooks)
+- nginx (Reverse Proxy)
+- TLS-Zertifikat (z.B. Let's Encrypt)
 - Twilio-Konto (für Telefonanrufe)
 
 ### 1. Repository klonen
@@ -51,7 +53,7 @@ Bearbeite `.env` und füge deine Twilio-Zugangsdaten ein:
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_auth_token_here
 TWILIO_PHONE_NUMBER=+41xxxxxxxxx
-BASE_URL=https://abc123.ngrok.io  # Deine ngrok-URL
+BASE_URL=https://alerts.example.com  # Deine öffentliche HTTPS-Domain
 ```
 
 ---
@@ -72,9 +74,17 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Der Backend-Server läuft auf http://localhost:8000
+Der Backend-Server läuft auf der in `BASE_URL` konfigurierten Adresse.
 
-API-Dokumentation (Swagger): http://localhost:8000/docs
+Die API-Dokumentation (Swagger) ist unter `${BASE_URL}/docs` erreichbar.
+
+Standardmässig werden diese URLs über `.env` gesteuert:
+
+```env
+BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+BACKEND_HEALTHCHECK_URL=http://127.0.0.1:8000/health
+```
 
 ---
 
@@ -137,43 +147,75 @@ TWILIO_PHONE_NUMBER=+41xxxxxxxxx
 
 ---
 
-## ngrok-Anleitung (lokale Entwicklung)
+## Nginx-Anleitung (Twilio-Webhooks)
 
-ngrok erstellt einen öffentlichen Tunnel zu deinem lokalen Server, damit Twilio die Webhooks erreichen kann.
+nginx stellt einen Reverse Proxy bereit, damit Twilio deine Webhooks über HTTPS (Port 443) erreichen kann.
 
-### Installation
+### 1. DNS konfigurieren
+
+Lege einen A-Record für deine Domain an, z.B.:
+
+```text
+alerts.example.com -> <DEINE_OEFFENTLICHE_SERVER_IP>
+```
+
+### 2. nginx installieren (Ubuntu/Debian)
 
 ```bash
-# macOS
-brew install ngrok
-
-# Linux / Windows
-# Download von https://ngrok.com/download
+sudo apt update
+sudo apt install -y nginx
 ```
 
-### Tunnel starten
+### 3. Reverse Proxy konfigurieren
+
+Erstelle eine nginx-Site, z.B. `/etc/nginx/sites-available/piket-alert`:
+
+```nginx
+server {
+   listen 80;
+   server_name alerts.example.com;
+
+   location / {
+      proxy_pass http://127.0.0.1:8000;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+   }
+}
+```
+
+Site aktivieren und nginx neu laden:
 
 ```bash
-# Backend-Port tunneln (Port 8000)
-ngrok http 8000
+sudo ln -s /etc/nginx/sites-available/piket-alert /etc/nginx/sites-enabled/piket-alert
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-ngrok zeigt dir eine öffentliche URL, z.B.:
-```
-Forwarding  https://abc123.ngrok.io -> http://localhost:8000
+### 4. TLS-Zertifikat (Let's Encrypt) einrichten
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d alerts.example.com
 ```
 
-### BASE_URL setzen
+### 5. BASE_URL setzen
 
-Setze diese URL als `BASE_URL` in deiner `.env`:
+Setze deine öffentliche HTTPS-Domain in `.env`:
 
 ```env
-BASE_URL=https://abc123.ngrok.io
+BASE_URL=https://alerts.example.com
 ```
 
 **Wichtig**: Starte das Backend nach der Änderung neu.
 
-**Hinweis**: In der kostenlosen Version von ngrok ändert sich die URL bei jedem Neustart.
+### 6. Twilio-Webhooks prüfen
+
+Twilio ruft diese Endpunkte über HTTPS auf:
+- `POST /twilio/voice`
+- `POST /twilio/status`
+- `POST /twilio/response`
 
 ---
 

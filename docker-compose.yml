@@ -12,13 +12,14 @@ services:
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
       - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER:-}
-      - BASE_URL=${BASE_URL:-http://localhost:8000}
+      - BASE_URL=${BASE_URL:-}
       - CORS_ORIGINS=http://localhost:3000
+      - BACKEND_HEALTHCHECK_URL=${BACKEND_HEALTHCHECK_URL:-http://backend:8000/health}
     volumes:
       - piket_data:/app
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "sh", "-c", "curl -f \"$BACKEND_HEALTHCHECK_URL\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,7 +31,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
     depends_on:
       - backend
     restart: unless-stopped
