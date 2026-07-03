@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CalendarRange, Clock3, Pencil, Plus, TimerReset, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, CalendarRange, Clock3, GripVertical, Pencil, Plus, TimerReset, Trash2, UsersRound } from 'lucide-react'
 import { MetricCard } from '@/components/metric-card'
 import { PageHeader } from '@/components/page-header'
 import { ActiveStateBadge } from '@/components/status-badges'
@@ -23,6 +23,60 @@ function formatDuration(startTime: string, endTime: string) {
   const end = new Date(endTime).getTime()
   const hours = Math.max((end - start) / 3_600_000, 0)
   return `${hours.toFixed(1)} h`
+}
+
+function getPlannerWindow(schedules: Schedule[]) {
+  if (schedules.length === 0) {
+    const now = new Date()
+    const start = new Date(now)
+    start.setHours(now.getHours() - 2, 0, 0, 0)
+    const end = new Date(now)
+    end.setHours(now.getHours() + 22, 0, 0, 0)
+    return { start, end }
+  }
+
+  const sortedStarts = schedules
+    .map((schedule) => new Date(schedule.start_time))
+    .sort((left, right) => left.getTime() - right.getTime())
+  const sortedEnds = schedules
+    .map((schedule) => new Date(schedule.end_time))
+    .sort((left, right) => left.getTime() - right.getTime())
+
+  const start = new Date(sortedStarts[0])
+  start.setHours(start.getHours() - 1, 0, 0, 0)
+  const end = new Date(sortedEnds[sortedEnds.length - 1])
+  end.setHours(end.getHours() + 1, 0, 0, 0)
+  return { start, end }
+}
+
+function buildTimeColumns(start: Date, end: Date) {
+  const columns: Date[] = []
+  const cursor = new Date(start)
+
+  while (cursor <= end) {
+    columns.push(new Date(cursor))
+    cursor.setHours(cursor.getHours() + 2)
+  }
+
+  return columns
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function getBlockPosition(start: Date, end: Date, gridStart: Date, gridEnd: Date) {
+  const totalMinutes = Math.max((gridEnd.getTime() - gridStart.getTime()) / 60000, 1)
+  const leftMinutes = clamp((start.getTime() - gridStart.getTime()) / 60000, 0, totalMinutes)
+  const widthMinutes = clamp((end.getTime() - start.getTime()) / 60000, 30, totalMinutes)
+
+  const left = (leftMinutes / totalMinutes) * 100
+  const width = (widthMinutes / totalMinutes) * 100
+
+  return {
+    left: `${left}%`,
+    width: `${Math.max(width, 6)}%`,
+  }
 }
 
 export default function SchedulesPage() {
@@ -131,6 +185,13 @@ export default function SchedulesPage() {
   const nextHandover = [...schedules]
     .filter((schedule) => new Date(schedule.end_time).getTime() > Date.now())
     .sort((left, right) => new Date(left.end_time).getTime() - new Date(right.end_time).getTime())[0]
+  const plannerWindow = getPlannerWindow(schedules)
+  const plannerColumns = buildTimeColumns(plannerWindow.start, plannerWindow.end)
+  const scheduleGroups = contacts.map((contact) => ({
+    contact,
+    items: schedules.filter((schedule) => schedule.contact_id === contact.id),
+  }))
+  const plannerGridTemplateColumns = `240px repeat(${plannerColumns.length}, minmax(84px, 1fr)) 130px`
 
   return (
     <div className="space-y-8">
@@ -273,8 +334,17 @@ export default function SchedulesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Schedule matrix</CardTitle>
-          <CardDescription>Alle Schichten und Übergaben in einer kompakten, zeitbezogenen Übersicht.</CardDescription>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <CardTitle>Piketplan als Baukasten</CardTitle>
+              <CardDescription>Ein rasterbasierter Planer im Excel-Stil. Kontakte stehen links, die Zeit läuft oben, Schichten werden als Blöcke dargestellt.</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+              <span className="rounded-full border border-border bg-muted/50 px-3 py-1">2h Raster</span>
+              <span className="rounded-full border border-border bg-muted/50 px-3 py-1">Drag-ready Look</span>
+              <span className="rounded-full border border-border bg-muted/50 px-3 py-1">Schnelle Bearbeitung</span>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -289,53 +359,79 @@ export default function SchedulesPage() {
               title="Noch keine Einsätze geplant"
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <tr>
-                  <TableHead>Person</TableHead>
-                  <TableHead>Fenster</TableHead>
-                  <TableHead>Dauer</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Aktionen</TableHead>
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {schedules.map((schedule) => (
-                  <TableRow key={schedule.id}>
-                    <TableCell>
-                      <div className="font-medium text-foreground">{schedule.contact ? schedule.contact.name : `#${schedule.contact_id}`}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1 text-muted-foreground">
-                        <div>{formatDateTime(schedule.start_time)}</div>
-                        <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">bis {formatDateTime(schedule.end_time)}</div>
+            <div className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+              <div className="overflow-x-auto">
+                <div className="min-w-[980px]">
+                  <div className="grid border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground" style={{ gridTemplateColumns: plannerGridTemplateColumns }}>
+                    <div className="sticky left-0 z-20 border-r border-border bg-card px-4 py-4">Person</div>
+                    {plannerColumns.map((column, index) => (
+                      <div className="border-r border-border px-3 py-4 text-center last:border-r-0" key={column.toISOString()}>
+                        <div>{index % 2 === 0 ? column.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/55 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-foreground">
-                        <TimerReset className="h-3.5 w-3.5" />
-                        {formatDuration(schedule.start_time, schedule.end_time)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <ActiveStateBadge active={schedule.active} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button onClick={() => openEdit(schedule)} size="sm" variant="secondary">
-                          <Pencil className="h-4 w-4" />
-                          Bearbeiten
-                        </Button>
-                        <Button onClick={() => handleDelete(schedule.id)} size="sm" variant="danger">
-                          <Trash2 className="h-4 w-4" />
-                          Löschen
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    ))}
+                    <div className="px-4 py-4 text-right">Aktionen</div>
+                  </div>
+
+                  <div className="divide-y divide-border">
+                    {scheduleGroups.map(({ contact, items }) => {
+                      const sortedItems = [...items].sort((left, right) => new Date(left.start_time).getTime() - new Date(right.start_time).getTime())
+
+                      return (
+                        <div className="grid" key={contact.id} style={{ gridTemplateColumns: plannerGridTemplateColumns }}>
+                          <div className="sticky left-0 z-10 border-r border-border bg-card px-4 py-5">
+                            <div className="font-medium text-foreground">{contact.name}</div>
+                            <div className="mt-1 text-xs uppercase tracking-[0.22em] text-muted-foreground">{sortedItems.length} Einträge</div>
+                          </div>
+
+                          <div className="relative min-h-[84px] border-r border-border bg-[linear-gradient(to_right,hsl(var(--border)/0.35)_1px,transparent_1px)] bg-[length:100%_100%] px-2 py-2" style={{ gridColumn: `span ${plannerColumns.length}` }}>
+                            {sortedItems.map((schedule) => {
+                              const position = getBlockPosition(new Date(schedule.start_time), new Date(schedule.end_time), plannerWindow.start, plannerWindow.end)
+
+                              return (
+                                <button
+                                  className={`absolute top-2 flex h-[calc(100%-1rem)] items-center gap-3 rounded-[18px] border px-3 text-left shadow-sm transition hover:-translate-y-0.5 ${
+                                    schedule.active ? 'border-brand/25 bg-brand/10 text-foreground' : 'border-border bg-muted/55 text-muted-foreground'
+                                  }`}
+                                  key={schedule.id}
+                                  onClick={() => openEdit(schedule)}
+                                  style={{ left: position.left, width: position.width }}
+                                  type="button"
+                                >
+                                  <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-medium text-foreground">{formatDateTime(schedule.start_time).slice(0, 16)}</div>
+                                    <div className="mt-1 truncate text-xs text-muted-foreground">bis {formatDateTime(schedule.end_time).slice(0, 16)} · {formatDuration(schedule.start_time, schedule.end_time)}</div>
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <ActiveStateBadge active={schedule.active} />
+                                    </div>
+                                  </div>
+                                </button>
+                              )
+                            })}
+                            {sortedItems.length === 0 ? (
+                              <div className="flex h-full items-center justify-center rounded-[16px] border border-dashed border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                                Kein Zeitfenster hinterlegt
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 px-4 py-5">
+                            <Button onClick={() => {
+                              setForm({ ...emptyForm, contact_id: contact.id })
+                              setEditId(null)
+                              setFormError(null)
+                              setShowForm(true)
+                            }} size="sm" variant="secondary">
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
