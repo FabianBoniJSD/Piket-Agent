@@ -19,16 +19,15 @@ type MetricCardProps = {
 
 export function MetricCard({ icon: Icon, label, value, description, tone = 'brand' }: MetricCardProps) {
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="relative p-6">
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-brand/5 blur-2xl" />
-        <div className="relative flex items-start justify-between gap-4">
+    <Card className="overflow-hidden border-border bg-card shadow-sm">
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">{label}</p>
-            <p className="mt-4 font-display text-4xl font-semibold tracking-tight text-foreground">{value}</p>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
+            <p className="mt-3 font-display text-3xl font-semibold tracking-tight text-foreground">{value}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
           </div>
-          <div className={cn('flex h-12 w-12 items-center justify-center rounded-2xl border', toneStyles[tone])}>
+          <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl border', toneStyles[tone])}>
             <Icon className="h-5 w-5" />
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert, Siren, Waves } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock3, RefreshCw, ShieldAlert, Siren } from 'lucide-react'
 import { MetricCard } from '@/components/metric-card'
 import { PageHeader } from '@/components/page-header'
 import { IncidentPriorityBadge, IncidentStatusBadge } from '@/components/status-badges'
@@ -44,13 +44,14 @@ export default function DashboardPage() {
     .slice(0, 8)
   const spotlight = recent.filter((incident) => incident.priority === 'critical' || incident.priority === 'high').slice(0, 3)
   const latestIncident = recent[0]
+  const resolvedShare = total > 0 ? Math.round((accepted / total) * 100) : 0
 
   return (
     <div className="space-y-8">
       <PageHeader
-        badge="Realtime escalation"
-        title="Operate your on-call response with more signal, less friction"
-        description="Monitor live incidents, trigger escalation calls and keep the entire duty roster synchronized from one responsive control surface."
+        badge="Dashboard"
+        title="Übersicht über Piket, Alarmierung und laufende Vorfälle"
+        description="Die Startseite bündelt die wichtigsten Kennzahlen und den aktuellen Incident-Status in einer reduzierten Übersicht."
         actions={
           <>
             <Button onClick={fetchData} variant="secondary">
@@ -65,15 +66,15 @@ export default function DashboardPage() {
         }
         meta={
           <>
-            <div className="glass-panel rounded-[24px] p-4">
-              <div className="label-muted">Operations pulse</div>
-              <div className="mt-3 text-2xl font-semibold text-foreground">{loading ? 'Syncing...' : `${alerting} live`}</div>
-              <div className="mt-2 text-sm text-muted-foreground">Aktive Alarmierungen mit laufenden Kontaktversuchen.</div>
+            <div className="rounded-[20px] border border-border bg-card p-4">
+              <div className="label-muted">Aktiv</div>
+              <div className="mt-3 text-2xl font-semibold text-foreground">{loading ? 'Syncing...' : `${alerting} offen`}</div>
+              <div className="mt-2 text-sm text-muted-foreground">Vorfälle mit laufender Alarmierung oder Bearbeitung.</div>
             </div>
-            <div className="glass-panel rounded-[24px] p-4">
-              <div className="label-muted">Latest incident</div>
+            <div className="rounded-[20px] border border-border bg-card p-4">
+              <div className="label-muted">Letzter Eintrag</div>
               <div className="mt-3 text-lg font-semibold text-foreground">{latestIncident ? latestIncident.title : 'Noch kein Vorfall'}</div>
-              <div className="mt-2 text-sm text-muted-foreground">{latestIncident ? formatDateTime(latestIncident.created_at) : 'Sobald ein Vorfall erstellt wird, erscheint er hier.'}</div>
+              <div className="mt-2 text-sm text-muted-foreground">{latestIncident ? formatDateTime(latestIncident.created_at) : 'Neue Vorfälle erscheinen hier automatisch.'}</div>
             </div>
           </>
         }
@@ -118,6 +119,60 @@ export default function DashboardPage() {
           value={loading ? '...' : critical}
         />
       </div>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <Card className="border-border bg-card shadow-sm lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Dashboard-Statistiken</CardTitle>
+            <CardDescription>Die wichtigsten Kennzahlen für die aktuelle Einsatzlage.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-[18px] border border-border bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">Bestätigt</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{loading ? '...' : accepted}</p>
+              <p className="mt-1 text-sm text-muted-foreground">Übernommene Vorfälle</p>
+            </div>
+            <div className="rounded-[18px] border border-border bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">Kritisch</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{loading ? '...' : critical}</p>
+              <p className="mt-1 text-sm text-muted-foreground">Höchste Priorität im System</p>
+            </div>
+            <div className="rounded-[18px] border border-border bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">Quote</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{loading ? '...' : `${resolvedShare}%`}</p>
+              <p className="mt-1 text-sm text-muted-foreground">Anteil bestätigter Vorfälle</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card shadow-sm">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+                <Clock3 className="h-4 w-4" />
+              </div>
+              <div>
+                <CardTitle>Nächster Blick</CardTitle>
+                <CardDescription>Kurzstatus für die operative Übersicht.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <div className="flex items-center justify-between rounded-[18px] border border-border bg-muted/50 px-4 py-3">
+              <span>Aktive Alarmierungen</span>
+              <span className="font-medium text-foreground">{loading ? '...' : alerting}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-[18px] border border-border bg-muted/50 px-4 py-3">
+              <span>Neueste Priorität</span>
+              <span className="font-medium text-foreground">{latestIncident ? latestIncident.priority : '-'}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-[18px] border border-border bg-muted/50 px-4 py-3">
+              <span>Neuester Status</span>
+              <span className="font-medium text-foreground">{latestIncident ? latestIncident.status : '-'}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
         <Card>
@@ -183,8 +238,8 @@ export default function DashboardPage() {
         <div className="grid gap-6">
           <Card className="overflow-hidden">
             <CardHeader>
-              <CardTitle>Escalation cadence</CardTitle>
-              <CardDescription>Ein kompakter Blick auf den Ablauf, wie das System auf einen Vorfall reagiert.</CardDescription>
+              <CardTitle>Ablauf</CardTitle>
+              <CardDescription>Der Standardprozess für neue Piketfälle in kompakter Form.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {[
@@ -193,7 +248,7 @@ export default function DashboardPage() {
                 'Antwort, Eskalation und Status werden fortlaufend im Protokoll sichtbar.',
               ].map((step, index) => (
                 <div className="flex gap-4" key={step}>
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-brand/25 bg-brand/10 text-sm font-semibold text-brand">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-sm font-semibold text-foreground">
                     0{index + 1}
                   </div>
                   <div className="pt-2 text-sm leading-6 text-muted-foreground">{step}</div>
@@ -205,12 +260,12 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-accent/25 bg-accent/10 text-accent">
-                  <Waves className="h-5 w-5" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+                  <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle>Priority spotlight</CardTitle>
-                  <CardDescription>Die dringendsten Vorfälle aus dem aktuellen Stream.</CardDescription>
+                  <CardTitle>Priorisierte Vorfälle</CardTitle>
+                  <CardDescription>Die dringendsten Einträge aus dem aktuellen Verlauf.</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -222,7 +277,7 @@ export default function DashboardPage() {
               ) : (
                 spotlight.map((incident) => (
                   <Link
-                    className="block rounded-[20px] border border-border bg-muted/35 p-4 transition hover:border-brand/30 hover:bg-muted/55"
+                    className="block rounded-[20px] border border-border bg-muted/35 p-4 transition hover:border-foreground/10 hover:bg-muted/55"
                     href={`/incidents/${incident.id}`}
                     key={incident.id}
                   >

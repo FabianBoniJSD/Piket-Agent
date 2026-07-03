@@ -24,50 +24,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className={`${sans.variable} ${display.variable} ${mono.variable} font-sans`}>
-        <div className="relative min-h-screen overflow-hidden">
-          <div className="relative flex min-h-screen flex-col lg:flex-row">
-            <aside className="hidden w-[304px] shrink-0 border-r border-border bg-[hsl(var(--shell)/0.82)] backdrop-blur-xl lg:block">
-              <div className="sticky top-0 flex h-screen flex-col px-5 py-6">
-                <div className="glass-panel overflow-hidden rounded-[26px] p-5">
-                  <div className="eyebrow">Piket Command</div>
-                  <div className="mt-5 flex items-start justify-between gap-4">
-                    <div>
-                      <h1 className="text-2xl font-semibold text-foreground">Control Center</h1>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        Alerting, escalation and duty planning in one operating surface.
-                      </p>
-                    </div>
-                    <div className="relative mt-1 h-11 w-11 rounded-2xl border border-border bg-brand/15 text-brand shadow-brand">
-                      <div className="absolute inset-0 animate-pulse-soft rounded-2xl bg-brand/20" />
-                      <div className="relative flex h-full items-center justify-center font-display text-lg font-semibold">PC</div>
-                    </div>
-                  </div>
-                  <ThemeToggle className="mt-5 w-full" />
+        <div className="min-h-screen">
+          <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
+            <aside className="hidden w-[304px] shrink-0 border-r border-border bg-[hsl(var(--shell)/0.94)] lg:block">
+              <div className="sticky top-0 flex h-screen flex-col px-6 py-8">
+                <div>
+                  <div className="eyebrow">Piket Agent</div>
+                  <h1 className="mt-4 text-2xl font-semibold text-foreground">Menü</h1>
                 </div>
 
-                <div className="label-muted mt-6">
-                  Navigation
-                </div>
-                <nav className="mt-3 flex-1">
-                  <NavLinks orientation="vertical" />
-                </nav>
-
-                <div className="glass-panel rounded-[24px] p-5">
-                  <p className="label-muted">System Focus</p>
-                  <p className="mt-3 text-base font-semibold text-foreground">Realtime response for critical incidents</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Use the dashboard to triage incidents fast, then keep contacts, schedules and Twilio settings synchronized.
-                  </p>
+                <div className="mt-6 flex-1 rounded-[28px] border border-border bg-card p-4 shadow-sm">
+                  <nav>
+                    <NavLinks orientation="vertical" />
+                  </nav>
                 </div>
               </div>
             </aside>
 
             <div className="flex min-h-screen flex-1 flex-col">
-              <header className="border-b border-border bg-[hsl(var(--shell)/0.9)] backdrop-blur-xl lg:hidden">
+              <header className="border-b border-border bg-[hsl(var(--shell)/0.96)] lg:hidden">
                 <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className="eyebrow">Piket Command</div>
+                      <div className="eyebrow">Piket Agent</div>
                       <div className="mt-2 text-lg font-semibold text-foreground">Control Center</div>
                     </div>
                     <ThemeToggle />
@@ -76,8 +55,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </header>
 
-              <main className="mx-auto flex w-full max-w-[1420px] flex-1 flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-8 xl:px-10">
-                {children}
+              <main className="flex flex-1 flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-8 xl:px-10">
+                <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col">{children}</div>
               </main>
             </div>
           </div>
