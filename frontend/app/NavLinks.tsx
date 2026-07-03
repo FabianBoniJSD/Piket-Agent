@@ -13,7 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard, section: 'Übersicht' },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Übersicht' },
   { href: '/incidents/new', label: 'Piketfall', icon: AlarmSmoke, section: 'Übersicht' },
   { href: '/incidents', label: 'Vorfälle', icon: ClipboardList, section: 'Übersicht' },
   { href: '/contacts', label: 'Piketpersonen', icon: UsersRound, section: 'Organisation' },
@@ -40,8 +40,8 @@ export default function NavLinks({ orientation = 'vertical' }: NavLinksProps) {
   const renderLink = (item: (typeof navItems)[number]) => {
     const Icon = item.icon
     const isActive =
-      item.href === '/'
-        ? pathname === '/'
+      item.href === '/dashboard'
+        ? pathname === '/dashboard'
         : item.href === '/incidents'
           ? pathname === '/incidents' || (pathname.startsWith('/incidents/') && pathname !== '/incidents/new')
           : pathname === item.href || pathname.startsWith(item.href + '/')
