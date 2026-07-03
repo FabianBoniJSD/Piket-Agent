@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CalendarRange, Clock3, GripVertical, Pencil, Plus, TimerReset, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, Clock3, GripVertical, LayoutGrid, Plus, Rows3, UsersRound } from 'lucide-react'
 import { MetricCard } from '@/components/metric-card'
 import { PageHeader } from '@/components/page-header'
 import { ActiveStateBadge } from '@/components/status-badges'
@@ -12,7 +12,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { createSchedule, deleteSchedule, getContacts, getSchedules, updateSchedule, type Contact, type Schedule, type ScheduleCreate } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
 
@@ -65,6 +64,29 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
+function toDatetimeLocalFromDate(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function getStartOfWeek(date: Date) {
+  const start = new Date(date)
+  const day = (start.getDay() + 6) % 7
+  start.setDate(start.getDate() - day)
+  start.setHours(0, 0, 0, 0)
+  return start
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function isSameDay(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate()
+}
+
 function getBlockPosition(start: Date, end: Date, gridStart: Date, gridEnd: Date) {
   const totalMinutes = Math.max((gridEnd.getTime() - gridStart.getTime()) / 60000, 1)
   const leftMinutes = clamp((start.getTime() - gridStart.getTime()) / 60000, 0, totalMinutes)
@@ -89,6 +111,10 @@ export default function SchedulesPage() {
   const [form, setForm] = useState<ScheduleCreate>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [plannerView, setPlannerView] = useState<'timeline' | 'week'>('timeline')
+  const [weekStart, setWeekStart] = useState(getStartOfWeek(new Date()))
+  const [draggedScheduleId, setDraggedScheduleId] = useState<number | null>(null)
+  const [dragSaving, setDragSaving] = useState(false)
 
   const fetchData = async () => {
     try {
@@ -181,6 +207,55 @@ export default function SchedulesPage() {
     }
   }
 
+  const moveSchedule = async (schedule: Schedule, contactId: number, targetDay?: Date) => {
+    const currentStart = new Date(schedule.start_time)
+    const currentEnd = new Date(schedule.end_time)
+    const durationMs = Math.max(currentEnd.getTime() - currentStart.getTime(), 30 * 60 * 1000)
+
+    const nextStart = new Date(currentStart)
+    if (targetDay) {
+      nextStart.setFullYear(targetDay.getFullYear(), targetDay.getMonth(), targetDay.getDate())
+    }
+    const nextEnd = new Date(nextStart.getTime() + durationMs)
+
+    const isSameContact = schedule.contact_id === contactId
+    const isSameTargetDay = !targetDay || isSameDay(currentStart, targetDay)
+    if (isSameContact && isSameTargetDay) {
+      return
+    }
+
+    try {
+      setDragSaving(true)
+      setError(null)
+      await updateSchedule(schedule.id, {
+        contact_id: contactId,
+        start_time: toDatetimeLocalFromDate(nextStart),
+        end_time: toDatetimeLocalFromDate(nextEnd),
+        active: schedule.active,
+      })
+      await fetchData()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Verschieben')
+    } finally {
+      setDragSaving(false)
+      setDraggedScheduleId(null)
+    }
+  }
+
+  const handleDropToContact = async (contactId: number) => {
+    if (draggedScheduleId === null) return
+    const schedule = schedules.find((item) => item.id === draggedScheduleId)
+    if (!schedule) return
+    await moveSchedule(schedule, contactId)
+  }
+
+  const handleDropToWeekCell = async (contactId: number, day: Date) => {
+    if (draggedScheduleId === null) return
+    const schedule = schedules.find((item) => item.id === draggedScheduleId)
+    if (!schedule) return
+    await moveSchedule(schedule, contactId, day)
+  }
+
   const activeCount = schedules.filter((schedule) => schedule.active).length
   const nextHandover = [...schedules]
     .filter((schedule) => new Date(schedule.end_time).getTime() > Date.now())
@@ -192,6 +267,7 @@ export default function SchedulesPage() {
     items: schedules.filter((schedule) => schedule.contact_id === contact.id),
   }))
   const plannerGridTemplateColumns = `240px repeat(${plannerColumns.length}, minmax(84px, 1fr)) 130px`
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
 
   return (
     <div className="space-y-8">
@@ -341,12 +417,43 @@ export default function SchedulesPage() {
             </div>
             <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
               <span className="rounded-full border border-border bg-muted/50 px-3 py-1">2h Raster</span>
-              <span className="rounded-full border border-border bg-muted/50 px-3 py-1">Drag-ready Look</span>
+              <span className="rounded-full border border-border bg-muted/50 px-3 py-1">Drag and drop</span>
               <span className="rounded-full border border-border bg-muted/50 px-3 py-1">Schnelle Bearbeitung</span>
             </div>
           </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <div className="inline-flex rounded-xl border border-border bg-muted/45 p-1">
+              <Button className="rounded-lg" onClick={() => setPlannerView('timeline')} size="sm" variant={plannerView === 'timeline' ? 'default' : 'ghost'}>
+                <Rows3 className="h-4 w-4" />
+                Timeline
+              </Button>
+              <Button className="rounded-lg" onClick={() => setPlannerView('week')} size="sm" variant={plannerView === 'week' ? 'default' : 'ghost'}>
+                <LayoutGrid className="h-4 w-4" />
+                Woche
+              </Button>
+            </div>
+
+            {plannerView === 'week' ? (
+              <div className="inline-flex items-center gap-2">
+                <Button onClick={() => setWeekStart(addDays(weekStart, -7))} size="sm" variant="secondary">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground">
+                  Woche ab {weekStart.toLocaleDateString('de-DE')}
+                </div>
+                <Button onClick={() => setWeekStart(addDays(weekStart, 7))} size="sm" variant="secondary">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent>
+          {dragSaving ? (
+            <div className="mb-4 rounded-xl border border-border bg-muted/45 px-4 py-2 text-sm text-muted-foreground">
+              Einsatz wird verschoben...
+            </div>
+          ) : null}
           {loading ? (
             <div className="rounded-[20px] border border-border bg-muted/35 px-6 py-12 text-center text-sm text-muted-foreground">
               Einsatzplan wird geladen...
@@ -358,6 +465,74 @@ export default function SchedulesPage() {
               icon={CalendarRange}
               title="Noch keine Einsätze geplant"
             />
+          ) : plannerView === 'week' ? (
+            <div className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+              <div className="overflow-x-auto">
+                <div className="min-w-[980px]">
+                  <div className="grid grid-cols-[220px_repeat(7,minmax(120px,1fr))] border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    <div className="sticky left-0 z-20 border-r border-border bg-card px-4 py-3">Person</div>
+                    {weekDays.map((day) => (
+                      <div className="border-r border-border px-3 py-3 text-center last:border-r-0" key={day.toISOString()}>
+                        <div>{day.toLocaleDateString('de-DE', { weekday: 'short' })}</div>
+                        <div className="mt-1 text-[11px] normal-case tracking-normal">{day.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="divide-y divide-border">
+                    {contacts.map((contact) => (
+                      <div className="grid grid-cols-[220px_repeat(7,minmax(120px,1fr))]" key={contact.id}>
+                        <div className="sticky left-0 z-10 border-r border-border bg-card px-4 py-4">
+                          <div className="font-medium text-foreground">{contact.name}</div>
+                        </div>
+
+                        {weekDays.map((day) => {
+                          const items = schedules
+                            .filter((schedule) => schedule.contact_id === contact.id)
+                            .filter((schedule) => isSameDay(new Date(schedule.start_time), day))
+                            .sort((left, right) => new Date(left.start_time).getTime() - new Date(right.start_time).getTime())
+
+                          return (
+                            <div
+                              className="min-h-[112px] border-r border-border bg-muted/15 p-2 last:border-r-0"
+                              key={`${contact.id}-${day.toISOString()}`}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={() => handleDropToWeekCell(contact.id, day)}
+                            >
+                              <div className="space-y-2">
+                                {items.map((schedule) => (
+                                  <button
+                                    className={`w-full rounded-xl border px-2 py-2 text-left transition hover:border-foreground/20 hover:bg-muted/45 ${
+                                      schedule.active ? 'border-brand/30 bg-brand/10' : 'border-border bg-card'
+                                    }`}
+                                    draggable
+                                    key={schedule.id}
+                                    onClick={() => openEdit(schedule)}
+                                    onDragStart={() => setDraggedScheduleId(schedule.id)}
+                                    onDragEnd={() => setDraggedScheduleId(null)}
+                                    type="button"
+                                  >
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                      <GripVertical className="h-3.5 w-3.5" />
+                                      {new Date(schedule.start_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                                      -
+                                      {new Date(schedule.end_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
+                                    <div className="mt-2">
+                                      <ActiveStateBadge active={schedule.active} />
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
               <div className="overflow-x-auto">
@@ -383,7 +558,12 @@ export default function SchedulesPage() {
                             <div className="mt-1 text-xs uppercase tracking-[0.22em] text-muted-foreground">{sortedItems.length} Einträge</div>
                           </div>
 
-                          <div className="relative min-h-[84px] border-r border-border bg-[linear-gradient(to_right,hsl(var(--border)/0.35)_1px,transparent_1px)] bg-[length:100%_100%] px-2 py-2" style={{ gridColumn: `span ${plannerColumns.length}` }}>
+                          <div
+                            className="relative min-h-[84px] border-r border-border bg-[linear-gradient(to_right,hsl(var(--border)/0.35)_1px,transparent_1px)] bg-[length:100%_100%] px-2 py-2"
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={() => handleDropToContact(contact.id)}
+                            style={{ gridColumn: `span ${plannerColumns.length}` }}
+                          >
                             {sortedItems.map((schedule) => {
                               const position = getBlockPosition(new Date(schedule.start_time), new Date(schedule.end_time), plannerWindow.start, plannerWindow.end)
 
@@ -392,8 +572,11 @@ export default function SchedulesPage() {
                                   className={`absolute top-2 flex h-[calc(100%-1rem)] items-center gap-3 rounded-[18px] border px-3 text-left shadow-sm transition hover:-translate-y-0.5 ${
                                     schedule.active ? 'border-brand/25 bg-brand/10 text-foreground' : 'border-border bg-muted/55 text-muted-foreground'
                                   }`}
+                                  draggable
                                   key={schedule.id}
                                   onClick={() => openEdit(schedule)}
+                                  onDragEnd={() => setDraggedScheduleId(null)}
+                                  onDragStart={() => setDraggedScheduleId(schedule.id)}
                                   style={{ left: position.left, width: position.width }}
                                   type="button"
                                 >
