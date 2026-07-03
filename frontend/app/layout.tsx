@@ -38,6 +38,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <NavLinks orientation="vertical" />
                   </nav>
                 </div>
+
+                <div className="mt-6">
+                  <ThemeToggle className="w-full" />
+                </div>
               </div>
             </aside>
 
